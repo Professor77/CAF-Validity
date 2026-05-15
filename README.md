@@ -1,22 +1,5 @@
 **Appendix A**
 
-**Table 1. Descriptive statistics for candidate CAF indicators**
-
-| Variable | n | Mean | SD | Min | Max | Skew | Kurtosis |
-|---|---:|---:|---:|---:|---:|---:|---:|
-| GLEU | 1000 | 75.42 | 12.07 | 28.78 | 100.00 | -0.64 | 0.49 |
-| Total_errors | 1000 | 15.18 | 8.73 | 0.00 | 53.00 | 0.99 | 1.27 |
-| text_ppl | 1000 | 46.76 | 25.21 | 7.96 | 192.98 | 1.99 | 6.04 |
-| FTcomp_ppl | 1000 | 24.67 | 11.09 | 8.61 | 129.58 | 3.04 | 17.63 |
-| ppl_delta | 1000 | 22.10 | 19.09 | -9.18 | 171.47 | 2.21 | 7.91 |
-| text_MLT | 1000 | 12.82 | 6.28 | 5.50 | 113.00 | 9.03 | 129.16 |
-| text_MLC | 1000 | 8.05 | 2.02 | 4.27 | 25.33 | 2.34 | 10.87 |
-| text_CN_C | 1000 | 0.71 | 0.36 | 0.00 | 3.25 | 2.13 | 9.28 |
-| text_CN_T | 1000 | 1.16 | 0.83 | 0.00 | 14.00 | 5.69 | 65.99 |
-
-
-**Appendix B**
-
 **Sample data.csv**
 |  id | text_ppl | FTcomp_ppl | FTcomp_GLEU | text_MLS | text_MLT | text_MLC | text_CN_T | text_CN_C | FTcomp_MLS | FTcomp_MLT | FTcomp_MLC | FTcomp_CN_T | FTcomp_CN_C | Total_errors | ppl_delta |
 | --: | -------: | ---------: | ----------: | -------: | -------: | -------: | --------: | --------: | ---------: | ---------: | ---------: | ----------: | ----------: | -----------: | --------: |
@@ -25,12 +8,11 @@
 | 100 |  51.6670 |    37.6584 |     82.5301 |  15.2857 |  15.2857 |   7.6429 |    2.2857 |    1.1429 |    16.0000 |    16.0000 |     8.0000 |      2.4286 |      1.2143 |            9 |   14.0085 |
 
 
-**Appendix C**
+**Appendix B**
 
 **R Script**
 
 # CAF Validation Study — Analysis Script (run Heywood tests, final SEM)
-
 
 # 1. Setup and Library Loading
 
@@ -122,7 +104,6 @@ latent_pair_test <- function(data, indicators, factor_name = "F") {
 }
 
 # 4. Screening tests (report Heywood cases)
-
 
 cat("\n--- SCREENING: Accuracy latent-pair test (GLEU + edit/error count) ---\n")
 acc_test <- latent_pair_test(df_scaled, vars_accuracy_pair, factor_name = "Accuracy")
