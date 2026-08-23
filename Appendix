@@ -1,5 +1,35 @@
-Appendix A
-**Table 1. Descriptive statistics for candidate CAF indicators**
+# Appendix A - ## Complex Instructions Prompt
+
+**System:** For the provided text, you will correct the English as follows:
+
+1. **First, correct all spelling mistakes.**  
+   Do not change spelling between different Englishes such as US English or UK English.  
+   Do not mark spelling changes with brackets or anything else.
+
+2. **Do not change grammar between different Englishes**,  
+   but fix any obviously wrong sentences (those that are confusing or highly unusual English usage).  
+   Do not change any sentences that make sense but are only slightly unusual.  
+   Do not substitute words (e.g., “because”/“since”, “but”/“however”, “next”/“afterward”)  
+   unless the meaning is wrong.
+
+3. **Join or split sentences when necessary:**  
+   - Join sentences when it is more natural.  
+   - Split sentences when a sentence is unnaturally long.
+
+4. **Bracket optional words:**  
+   - If a word is optional and removing it would *not* make the sentence ungrammatical, put it in brackets.  
+   - Do **not** bracket required words.  
+   - Only bracket added words if they are optional.
+
+**Example:**  
+Input:  
+`I wents to hospital tooday.`  
+Output:  
+`I went to (the) hospital today.`  
+“the” is optional → bracketed.
+
+# Appendix B -**Table 1. Descriptive statistics for candidate CAF indicators**
+
 
 | Variable | n | Mean | SD | Min | Max | Skew | Kurtosis |
 |---|---:|---:|---:|---:|---:|---:|---:|
@@ -14,15 +44,109 @@ Appendix A
 | text_CN_T | 1000 | 1.16 | 0.83 | 0.00 | 14.00 | 5.69 | 65.99 |
 |
 
+# Appendix C — Metric generation pipeline
 
-Appendix B
+This script provides the implementation for calculating the multi-dimensional metric profile used in this study. It utilizes the ERRANT framework for linguistic edit classification and $F_{0.5}$ alignment, and the Transformers library for Perplexity (PPL) calculation.
+
+```python
+import pandas as pd
+import torch
+import errant
+from nltk.translate.gleu_score import sentence_gleu
+from transformers import GPT2LMHeadModel, GPT2TokenizerFast
+
+# 1. SETUP: Tools and Models
+# Load ERRANT for linguistic edit categorization
+annotator = errant.load('en')
+
+# Define device for torch (GPU if available)
+device = "cuda" if torch.cuda.is_available() else "cpu"
+
+# Load GPT-2: The research standard for calculating reference-free Perplexity
+ppl_model = GPT2LMHeadModel.from_pretrained("gpt2").to(device)
+ppl_tokenizer = GPT2TokenizerFast.from_pretrained("gpt2")
+
+# 2. DATA INPUT
+# 'best_model_out'   = The FTComp Fine-tuned model (N=2,617) acting as pseudo-gold
+# 'target_model_out' = The configuration being evaluated (e.g., 4o Simple)
+data = {
+    'original': ["I have learn about his attitude"],
+    'best_model_out': ["I have learned about his attitude"],
+    'target_model_out': ["I have learned about his attitude"]
+}
+df = pd.DataFrame(data)
+
+# 3. METRIC FUNCTIONS
+
+def get_ppl(text):
+    """Calculates Perplexity (Fluency). Lower is more natural."""
+    encodings = ppl_tokenizer(text, return_tensors="pt")
+    seq_len = encodings.input_ids.size(1)
+    with torch.no_grad():
+        outputs = ppl_model(encodings.input_ids.to(device), labels=encodings.input_ids.to(device))
+    return torch.exp(outputs.loss).item()
+
+def get_f05_and_edits(orig, ref, hyp):
+    """
+    Calculates F0.5 (Convergence with Best Model) and extracts atomic edits.
+    F0.5 weights Precision higher to penalize over-correction.
+    """
+    orig_p = annotator.parse(orig)
+    ref_p = annotator.parse(ref)
+    hyp_p = annotator.parse(hyp)
+    
+    gold_edits = annotator.annotate(orig_p, ref_p)
+    hyp_edits = annotator.annotate(orig_p, hyp_p)
+    
+    # Quantitative: F0.5 Calculation
+    gold_set = {(e.o_start, e.o_end, e.o_str, e.c_str) for e in gold_edits}
+    hyp_set = {(e.o_start, e.o_end, e.o_str, e.c_str) for e in hyp_edits}
+    
+    tp = len(gold_set.intersection(hyp_set))
+    fp = len(hyp_set - gold_set)
+    fn = len(gold_set - hyp_set)
+    
+    prec = tp / (tp + fp) if (tp + fp) > 0 else 0
+    rec = tp / (tp + fn) if (tp + fn) > 0 else 0
+    
+    # Standard F0.5 formula (Beta=0.5)
+    f05 = (1.25 * prec * rec) / (0.25 * prec + rec) if (0.25 * prec + rec) > 0 else 0
+    
+    # Qualitative: Atomic Edit Classification
+    edit_details = [{"type": e.type, "orig": e.o_str, "cor": e.c_str} for e in hyp_edits]
+    
+    return f05, edit_details
+
+# 4. EXECUTION
+print(f"{'Original':<20} | {'Type':<10} | {'Target Correction'}")
+print("-" * 55)
+
+for idx, row in df.iterrows():
+    # A. Minimalism (GLEU) - Target vs. Original
+    df.at[idx, 'GLEU'] = sentence_gleu([row['original'].split()], row['target_model_out'].split())
+    
+    # B. Fluency (PPL) - Target Output
+    df.at[idx, 'PPL'] = get_ppl(row['target_model_out'])
+    
+    # C. Convergence (F0.5) & Atomic Edits - Target vs. Pseudo-Gold
+    f05_score, edits = get_f05_and_edits(row['original'], row['best_model_out'], row['target_model_out'])
+    df.at[idx, 'F0.5'] = f05_score
+    
+    for e in edits:
+        print(f"{e['orig']:<20} | {e['type']:<10} | {e['cor']}")
+
+# Display Quantitative Summary
+print("\n--- Final Metrics ---")
+print(df[['GLEU', 'PPL', 'F0.5']].round(4))
+
+Appendix D
 Sample data.csv
 id,text_ppl,FTcomp_ppl,FTcomp_GLEU,text_MLS,text_MLT,text_MLC,text_CN_T,text_CN_C,FTcomp_MLS,FTcomp_MLT,FTcomp_MLC,FTcomp_CN_T,FTcomp_CN_C,Total_errors,ppl_delta
 21,32.78776937903214,22.57161759244736,75.63176895306859,16.125,14.3333,8.6,0.6667,0.4,15.75,14.0,9.0,0.4444,0.2857,16,10.216151786584781
 49,75.64138480656703,26.11567142955731,71.23552123552123,14.75,11.8,8.4286,0.4,0.2857,15.125,12.1,8.0667,0.7,0.4667,18,49.52571337700972
 100,51.66697185593112,37.65842603823959,82.53012048192771,15.2857,15.2857,7.6429,2.2857,1.1429,16.0,16.0,8.0,2.4286,1.2143,9,14.008545817691534
 
-Appendix C
+Appendix E
 R Script
 # ==============================================================================
 # CAF Validation Study — Analysis Script (run Heywood tests, final SEM)
