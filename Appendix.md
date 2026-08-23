@@ -295,7 +295,7 @@ l2sca = pd.read_csv(L2SCA_OUTPUT)
 
 # Appendix D — Sample Data
 
-|  id | text_ppl | FTcomp_ppl | FTcomp_GLEU | text_MLS | text_MLT | text_MLC | text_CN_T | text_CN_C | FTcomp_MLS | FTcomp_MLT | FTcomp_MLC | FTcomp_CN_T | FTcomp_CN_C | Total_errors | ppl_delta |
+|  id | text_ppl | corrected_ppl | corrected_GLEU | text_MLS | text_MLT | text_MLC | text_CN_T | text_CN_C | corrected_MLS | corrected_MLT | corrected_MLC | corrected_CN_T | corrected_CN_C | Total_errors | ppl_delta |
 | --: | -------: | ---------: | ----------: | -------: | -------: | -------: | --------: | --------: | ---------: | ---------: | ---------: | ----------: | ----------: | -----------: | --------: |
 |  21 |  32.7878 |    22.5716 |     75.6318 |  16.1250 |  14.3333 |   8.6000 |    0.6667 |    0.4000 |    15.7500 |    14.0000 |     9.0000 |      0.4444 |      0.2857 |           16 |   10.2162 |
 |  49 |  75.6414 |    26.1157 |     71.2355 |  14.7500 |  11.8000 |   8.4286 |    0.4000 |    0.2857 |    15.1250 |    12.1000 |     8.0667 |      0.7000 |      0.4667 |           18 |   49.5257 |
