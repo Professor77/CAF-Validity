@@ -30,25 +30,7 @@
 
 Here, “the” is optional and is therefore bracketed.
 
-
-# Appendix B — Descriptive Statistics for Candidate CAF Indicators
-
-| Variable | n | Mean | SD | Min | Max | Skew | Kurtosis |
-|---|---:|---:|---:|---:|---:|---:|---:|
-| GLEU | 1000 | 75.42 | 12.07 | 28.78 | 100.00 | -0.64 | 0.49 |
-| Total_errors | 1000 | 15.18 | 8.73 | 0.00 | 53.00 | 0.99 | 1.27 |
-| text_ppl | 1000 | 46.76 | 25.21 | 7.96 | 192.98 | 1.99 | 6.04 |
-| corrected_ppl | 1000 | 24.67 | 11.09 | 8.61 | 129.58 | 3.04 | 17.63 |
-| ppl_delta | 1000 | 22.10 | 19.09 | -9.18 | 171.47 | 2.21 | 7.91 |
-| text_MLT | 1000 | 12.82 | 6.28 | 5.50 | 113.00 | 9.03 | 129.16 |
-| text_MLC | 1000 | 8.05 | 2.02 | 4.27 | 25.33 | 2.34 | 10.87 |
-| text_CN_C | 1000 | 0.71 | 0.36 | 0.00 | 3.25 | 2.13 | 9.28 |
-| text_CN_T | 1000 | 1.16 | 0.83 | 0.00 | 14.00 | 5.69 | 65.99 |
-
-*Note. n = 1,000 for all variables.*
-
-
-# Appendix C — Metric Generation Pipeline
+# Appendix B — Metric Generation Pipeline
 
 The following code illustrates the computational pipeline used to generate the candidate automated CAF measures. Original learner texts and their minimally corrected counterparts were stored using corresponding text identifiers. Accuracy measures were calculated from the relationship between each original and corrected text, while perplexity was calculated separately for both versions. ΔPPL was then calculated as the difference between original-text and corrected-text perplexity. Syntactic complexity was calculated from the original learner texts using the standard L2 Syntactic Complexity Analyzer (L2SCA) implementation.
 
@@ -292,6 +274,21 @@ l2sca = pd.read_csv(L2SCA_OUTPUT)
 
 **Note.** This code illustrates the metric-generation procedure rather than reproducing local file paths from the original analysis environment. GLEU represents similarity between each learner text and its minimally corrected counterpart. `Total_errors` represents the number of ERRANT-aligned edits between the same text pair. Raw perplexity (`text_ppl`) represents model-relative distributional predictability of the learner text, while `ppl_delta` is calculated as `text_ppl − corrected_ppl`. L2SCA was applied only to the original learner texts. MLT, MLC, CN/C, and CN/T constituted the candidate syntactic-complexity set; subsequent measurement-model analysis determined the final retained indicators.
 
+# Appendix C — Descriptive Statistics for Candidate CAF Indicators
+
+| Variable | n | Mean | SD | Min | Max | Skew | Kurtosis |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| GLEU | 1000 | 75.42 | 12.07 | 28.78 | 100.00 | -0.64 | 0.49 |
+| Total_errors | 1000 | 15.18 | 8.73 | 0.00 | 53.00 | 0.99 | 1.27 |
+| text_ppl | 1000 | 46.76 | 25.21 | 7.96 | 192.98 | 1.99 | 6.04 |
+| corrected_ppl | 1000 | 24.67 | 11.09 | 8.61 | 129.58 | 3.04 | 17.63 |
+| ppl_delta | 1000 | 22.10 | 19.09 | -9.18 | 171.47 | 2.21 | 7.91 |
+| text_MLT | 1000 | 12.82 | 6.28 | 5.50 | 113.00 | 9.03 | 129.16 |
+| text_MLC | 1000 | 8.05 | 2.02 | 4.27 | 25.33 | 2.34 | 10.87 |
+| text_CN_C | 1000 | 0.71 | 0.36 | 0.00 | 3.25 | 2.13 | 9.28 |
+| text_CN_T | 1000 | 1.16 | 0.83 | 0.00 | 14.00 | 5.69 | 65.99 |
+
+*Note. n = 1,000 for all variables.*
 
 # Appendix D — Sample Data
 
