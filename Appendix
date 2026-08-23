@@ -36,7 +36,7 @@ Output:
 | GLEU | 1000 | 75.42 | 12.07 | 28.78 | 100.00 | -0.64 | 0.49 |
 | Total_errors | 1000 | 15.18 | 8.73 | 0.00 | 53.00 | 0.99 | 1.27 |
 | text_ppl | 1000 | 46.76 | 25.21 | 7.96 | 192.98 | 1.99 | 6.04 |
-| FTcomp_ppl | 1000 | 24.67 | 11.09 | 8.61 | 129.58 | 3.04 | 17.63 |
+| corrected_ppl | 1000 | 24.67 | 11.09 | 8.61 | 129.58 | 3.04 | 17.63 |
 | ppl_delta | 1000 | 22.10 | 19.09 | -9.18 | 171.47 | 2.21 | 7.91 |
 | text_MLT | 1000 | 12.82 | 6.28 | 5.50 | 113.00 | 9.03 | 129.16 |
 | text_MLC | 1000 | 8.05 | 2.02 | 4.27 | 25.33 | 2.34 | 10.87 |
@@ -46,98 +46,255 @@ Output:
 
 # Appendix C — Metric generation pipeline
 
-This script provides the implementation for calculating the multi-dimensional metric profile used in this study. It utilizes the ERRANT framework for linguistic edit classification and $F_{0.5}$ alignment, and the Transformers library for Perplexity (PPL) calculation.
+The following code illustrates the computational pipeline used to generate the candidate automated CAF measures. Original learner texts and their minimally corrected counterparts were stored using corresponding text identifiers. Accuracy measures were calculated from the relationship between each original and corrected text, while perplexity was calculated separately for both versions. ΔPPL was then calculated as the difference between original-text and corrected-text perplexity. Syntactic complexity was calculated from the original learner texts using the standard L2 Syntactic Complexity Analyzer (L2SCA) implementation.
 
-```python
+import os
+import subprocess
 import pandas as pd
 import torch
 import errant
+
 from nltk.translate.gleu_score import sentence_gleu
 from transformers import GPT2LMHeadModel, GPT2TokenizerFast
 
-# 1. SETUP: Tools and Models
-# Load ERRANT for linguistic edit categorization
-annotator = errant.load('en')
 
-# Define device for torch (GPU if available)
+# ============================================================
+# 1. PATHS AND SETUP
+# ============================================================
+
+# Illustrative directory structure:
+#
+# project/
+# ├── original_texts/
+# │   ├── text_001.txt
+# │   ├── text_002.txt
+# │   └── ...
+# ├── corrected_texts/
+# │   ├── text_001.txt
+# │   ├── text_002.txt
+# │   └── ...
+# └── l2sca_output.csv
+
+ORIGINAL_DIR = "original_texts/"
+CORRECTED_DIR = "corrected_texts/"
+L2SCA_OUTPUT = "l2sca_output.csv"
+
+
+# Load ERRANT for identifying edits between learner
+# and minimally corrected texts.
+annotator = errant.load("en")
+
+
+# Load the fixed GPT-2 model used for perplexity estimation.
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
-# Load GPT-2: The research standard for calculating reference-free Perplexity
 ppl_model = GPT2LMHeadModel.from_pretrained("gpt2").to(device)
 ppl_tokenizer = GPT2TokenizerFast.from_pretrained("gpt2")
 
-# 2. DATA INPUT
-# 'best_model_out'   = The FTComp Fine-tuned model (N=2,617) acting as pseudo-gold
-# 'target_model_out' = The configuration being evaluated (e.g., 4o Simple)
-data = {
-    'original': ["I have learn about his attitude"],
-    'best_model_out': ["I have learned about his attitude"],
-    'target_model_out': ["I have learned about his attitude"]
-}
-df = pd.DataFrame(data)
+ppl_model.eval()
 
-# 3. METRIC FUNCTIONS
+
+# ============================================================
+# 2. METRIC FUNCTIONS
+# ============================================================
 
 def get_ppl(text):
-    """Calculates Perplexity (Fluency). Lower is more natural."""
-    encodings = ppl_tokenizer(text, return_tensors="pt")
-    seq_len = encodings.input_ids.size(1)
+    """
+    Calculate model-relative perplexity for a completed text.
+
+    Lower values indicate greater distributional predictability
+    under the fixed GPT-2 language model.
+    """
+    encodings = ppl_tokenizer(
+        text,
+        return_tensors="pt"
+    )
+
+    input_ids = encodings.input_ids.to(device)
+
     with torch.no_grad():
-        outputs = ppl_model(encodings.input_ids.to(device), labels=encodings.input_ids.to(device))
+        outputs = ppl_model(
+            input_ids,
+            labels=input_ids
+        )
+
     return torch.exp(outputs.loss).item()
 
-def get_f05_and_edits(orig, ref, hyp):
+
+def get_gleu(original, corrected):
     """
-    Calculates F0.5 (Convergence with Best Model) and extracts atomic edits.
-    F0.5 weights Precision higher to penalize over-correction.
+    Calculate GLEU similarity between the original learner text
+    and its minimally corrected counterpart.
     """
-    orig_p = annotator.parse(orig)
-    ref_p = annotator.parse(ref)
-    hyp_p = annotator.parse(hyp)
-    
-    gold_edits = annotator.annotate(orig_p, ref_p)
-    hyp_edits = annotator.annotate(orig_p, hyp_p)
-    
-    # Quantitative: F0.5 Calculation
-    gold_set = {(e.o_start, e.o_end, e.o_str, e.c_str) for e in gold_edits}
-    hyp_set = {(e.o_start, e.o_end, e.o_str, e.c_str) for e in hyp_edits}
-    
-    tp = len(gold_set.intersection(hyp_set))
-    fp = len(hyp_set - gold_set)
-    fn = len(gold_set - hyp_set)
-    
-    prec = tp / (tp + fp) if (tp + fp) > 0 else 0
-    rec = tp / (tp + fn) if (tp + fn) > 0 else 0
-    
-    # Standard F0.5 formula (Beta=0.5)
-    f05 = (1.25 * prec * rec) / (0.25 * prec + rec) if (0.25 * prec + rec) > 0 else 0
-    
-    # Qualitative: Atomic Edit Classification
-    edit_details = [{"type": e.type, "orig": e.o_str, "cor": e.c_str} for e in hyp_edits]
-    
-    return f05, edit_details
+    return sentence_gleu(
+        [original.split()],
+        corrected.split()
+    )
 
-# 4. EXECUTION
-print(f"{'Original':<20} | {'Type':<10} | {'Target Correction'}")
-print("-" * 55)
 
-for idx, row in df.iterrows():
-    # A. Minimalism (GLEU) - Target vs. Original
-    df.at[idx, 'GLEU'] = sentence_gleu([row['original'].split()], row['target_model_out'].split())
-    
-    # B. Fluency (PPL) - Target Output
-    df.at[idx, 'PPL'] = get_ppl(row['target_model_out'])
-    
-    # C. Convergence (F0.5) & Atomic Edits - Target vs. Pseudo-Gold
-    f05_score, edits = get_f05_and_edits(row['original'], row['best_model_out'], row['target_model_out'])
-    df.at[idx, 'F0.5'] = f05_score
-    
-    for e in edits:
-        print(f"{e['orig']:<20} | {e['type']:<10} | {e['cor']}")
+def get_edit_count(original, corrected):
+    """
+    Count the atomic ERRANT edits required to transform
+    the learner text into its minimally corrected counterpart.
+    """
+    original_parsed = annotator.parse(original)
+    corrected_parsed = annotator.parse(corrected)
 
-# Display Quantitative Summary
-print("\n--- Final Metrics ---")
-print(df[['GLEU', 'PPL', 'F0.5']].round(4))
+    edits = annotator.annotate(
+        original_parsed,
+        corrected_parsed
+    )
+
+    return len(edits)
+
+
+# ============================================================
+# 3. ACCURACY AND PERPLEXITY MEASURES
+# ============================================================
+
+records = []
+
+for filename in sorted(os.listdir(ORIGINAL_DIR)):
+
+    if not filename.endswith(".txt"):
+        continue
+
+    original_path = os.path.join(
+        ORIGINAL_DIR,
+        filename
+    )
+
+    corrected_path = os.path.join(
+        CORRECTED_DIR,
+        filename
+    )
+
+    with open(
+        original_path,
+        "r",
+        encoding="utf-8"
+    ) as f:
+        original = f.read().strip()
+
+    with open(
+        corrected_path,
+        "r",
+        encoding="utf-8"
+    ) as f:
+        corrected = f.read().strip()
+
+
+    # Accuracy measures
+    gleu = get_gleu(
+        original,
+        corrected
+    )
+
+    total_errors = get_edit_count(
+        original,
+        corrected
+    )
+
+
+    # Perplexity measures
+    text_ppl = get_ppl(original)
+
+    corrected_ppl = get_ppl(
+        corrected
+    )
+
+    # Correction-normalized perplexity change
+    ppl_delta = (
+        text_ppl - corrected_ppl
+    )
+
+
+    records.append({
+        "file": filename,
+        "GLEU": gleu,
+        "Total_errors": total_errors,
+        "text_ppl": text_ppl,
+        "corrected_ppl": corrected_ppl,
+        "ppl_delta": ppl_delta
+    })
+
+
+caf_metrics = pd.DataFrame(records)
+
+
+# ============================================================
+# 4. SYNTACTIC COMPLEXITY: L2SCA
+# ============================================================
+
+# Syntactic complexity was calculated from the original
+# learner texts only.
+
+# The standard L2SCA implementation processes learner texts
+# and outputs its full set of syntactic-complexity indices.
+# The installation path shown here is illustrative.
+
+subprocess.run([
+    "python3",
+    "L2SCA/analyzeFolder.py",
+    ORIGINAL_DIR,
+    L2SCA_OUTPUT
+], check=True)
+
+
+# Read the resulting L2SCA output.
+l2sca = pd.read_csv(L2SCA_OUTPUT)
+
+
+# The candidate syntactic-complexity measures examined
+# in the validation analysis were:
+#
+# MLT  = Mean Length of T-unit
+# MLC  = Mean Length of Clause
+# CN/C = Complex Nominals per Clause
+# CN/T = Complex Nominals per T-unit
+#
+# These measures were selected from the full L2SCA output
+# and matched to the corresponding learner-text identifier.
+
+
+# ============================================================
+# 5. COMBINED CANDIDATE-METRIC DATASET
+# ============================================================
+
+# The correction-derived and syntactic-complexity results
+# were combined using the corresponding text identifier.
+#
+# For example:
+#
+# final_data = caf_metrics.merge(
+#     l2sca,
+#     on="file",
+#     how="left"
+# )
+#
+# The exact identifier column depends on the filename field
+# generated by the local L2SCA installation.
+
+
+# Candidate variables subsequently entered into
+# CFA/SEM screening were:
+#
+# Accuracy:
+#   GLEU
+#   Total_errors
+#
+# Product-based fluency:
+#   text_ppl
+#   ppl_delta
+#
+# Syntactic complexity:
+#   MLT
+#   MLC
+#   CN/C
+#   CN/T
+#
+# corrected_ppl was used to derive ppl_delta but was not
+# itself entered as a candidate fluency indicator.
 
 Appendix D
 Sample data.csv
